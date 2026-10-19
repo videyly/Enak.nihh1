@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Viskleyk</title>
+<style>
+  :root{--bg:#fff;--text:#0f172a;--muted:#64748b;--line:#e2e8f0}
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  html,body{height:100%;margin:0}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,Arial,sans-serif;color:var(--text);background:var(--bg);line-height:1.45;overflow-x:hidden}
+  .appbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);-webkit-backdrop-filter:saturate(180%) blur(8px);backdrop-filter:saturate(180%) blur(8px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0)}
+  .bar-inner{max-width:1200px;margin-inline:auto;display:flex;align-items:center;gap:8px;padding:10px 16px;font-weight:800}
+  .logo{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:6px;background:#111827;color:#fff;font-size:14px}
+  .wrap{max-width:1200px;margin:20px auto 40px;padding-inline:16px;display:flex;flex-direction:column;align-items:center}
+  .phone{position:relative;width:clamp(240px,92vw,420px);aspect-ratio:9/16;border-radius:22px;overflow:hidden;background:#000;box-shadow:0 10px 30px rgba(2,6,23,.15),0 3px 10px rgba(2,6,23,.08)}
+  .phone video{width:100%;height:100%;object-fit:cover;display:block}
+  .meta{margin-top:18px;color:var(--muted);font-size:13px;text-align:center}
+  .msg{position:absolute;inset:0;display:none;place-items:center;padding:24px;text-align:center;color:#e5e7eb;font-size:14px}
+  .msg.show{display:grid}
+</style>
+</head>
+<body>
+<header class="appbar">
+  <div class="bar-inner"><span class="logo" aria-hidden="true">V</span><span>Viskleyk</span></div>
+</header>
+
+<main class="wrap">
+  <div class="phone">
+    <video id="video" playsinline controls preload="metadata"></video>
+    <div id="msg" class="msg"></div>
+  </div>
+  <div class="meta" id="meta">0:00 / 0:00</div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ========= KONFIG ========= */
+  var CDN = "https://cdn.videy.co/";          // sumber video: CDN + ID + ".mp4"
+  var POPUNDERS = [
+    { at: 5,  url: "https://auctionr.org/4/1359c648b1c64e65bde7f560ceaeb9b5" },
+    { at: 30, url: "https://auctionr.org/4/1359c648b1c64e65bde7f560ceaeb9b5" },
+    { at: 60, url: "https://sauszhi.com/2154360" }
+  ];
+  /* ========================== */
+
+  /* --- Ambil ID video dari URL: ?id=XXX | ?v=XXX | /XXX | link videy lengkap --- */
+  function getVideoId() {
+    var p = new URLSearchParams(location.search);
+    var raw = p.get("id") || p.get("v") || "";
+    if (!raw) {
+      var seg = location.pathname.split("/").filter(Boolean)[0] || "";
+      if (seg && seg.toLowerCase() !== "index.html") raw = decodeURIComponent(seg);
+    }
+    if (!raw && location.search.length > 1 && location.search.indexOf("=") === -1) {
+      raw = location.search.slice(1);            // bentuk: /?XXXX
+    }
+    raw = raw.trim();
+    var m = raw.match(/[?&]id=([A-Za-z0-9_-]+)/) ||
+            raw.match(/cdn\.videy\.co\/([A-Za-z0-9_-]+)/);
+    if (m) raw = m[1];
+    raw = raw.replace(/\.mp4$/i, "");
+    return /^[A-Za-z0-9_-]{3,64}$/.test(raw) ? raw : "";
+  }
+
+  var v = document.getElementById("video");
+  var meta = document.getElementById("meta");
+  var msg = document.getElementById("msg");
+
+  function showMsg(t) { msg.textContent = t; msg.classList.add("show"); }
+  function fmt(t) {
+    if (!isFinite(t)) return "0:00";
+    var m = Math.floor(t / 60), s = Math.floor(t % 60);
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  var id = getVideoId();
+  if (id) {
+    v.src = CDN + id + ".mp4";
+    document.title = "Viskleyk";
+  } else {
+    showMsg("Video tidak ditemukan. Tambahkan ID di belakang link, contoh: ?id=KODEVIDEO");
+  }
+  v.addEventListener("error", function () { showMsg("Video gagal dimuat."); });
+  v.addEventListener("loadedmetadata", function () { meta.textContent = "0:00 / " + fmt(v.duration); });
+  v.addEventListener("timeupdate", function () { meta.textContent = fmt(v.currentTime) + " / " + fmt(v.duration); });
+
+  /* --- Popunder ---
+     Browser memblokir window.open tanpa interaksi user. Jadi saat waktunya tiba,
+     popunder "siap" dan dibuka pada sentuhan/klik user berikutnya (satu per interaksi). */
+  var queue = [];
+  var t0 = Date.now();
+
+  POPUNDERS.forEach(function (p) {
+    setTimeout(function () { queue.push(p.url); }, p.at * 1000);
+  });
+
+  function fireNext() {
+    if (!queue.length) return;
+    var url = queue.shift();
+    try {
+      var w = window.open(url, "_blank", "noopener,noreferrer");
+      if (w) { try { w.blur(); } catch (e) {} }
+      window.focus();                              // fokus kembali ke halaman = efek "under"
+    } catch (e) {}
+  }
+
+  ["click", "touchend"].forEach(function (ev) {
+    document.addEventListener(ev, fireNext, { capture: true, passive: true });
+  });
+})();
+</script>
+</body>
+</html>
